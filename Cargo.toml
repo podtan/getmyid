@@ -1,0 +1,26 @@
+[package]
+name = "getmyid"
+version = "0.1.0"
+edition = "2021"
+authors = ["Leo <leo@podtan.com>"]
+description = "Rust client library for whoami Identity-by-PID daemon"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/podtan/getmyid"
+documentation = "https://docs.rs/getmyid"
+readme = "README.md"
+keywords = ["identity", "authentication", "unix-socket", "whoami", "pid"]
+categories = ["authentication", "os::unix-apis"]
+
+[features]
+default = []
+tokio = ["dep:tokio"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+tokio = { version = "1.0", features = ["net", "io-util", "time"], optional = true }
+
+[dev-dependencies]
+tempfile = "3.0"
+tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "macros", "net", "io-util", "time"] }
