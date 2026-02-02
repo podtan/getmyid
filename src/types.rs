@@ -17,6 +17,9 @@ pub struct Identity {
     /// Configuration/API server URL for this identity.
     pub config_url: String,
 
+    /// Authentication token for this identity.
+    pub token: String,
+
     /// Process ID of the calling process.
     pub pid: u32,
 
@@ -46,6 +49,7 @@ pub(crate) enum ResponseData {
         identity: String,
         idm_url: String,
         config_url: String,
+        token: String,
         pid: u32,
         uid: u32,
         gid: u32,

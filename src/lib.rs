@@ -27,6 +27,7 @@
 //!     println!("Identity: {}", identity.identity);
 //!     println!("IDM URL: {}", identity.idm_url);
 //!     println!("Config URL: {}", identity.config_url);
+//!     println!("Token: {}", identity.token);
 //!     println!("Process: {} (PID: {})", identity.process, identity.pid);
 //!     
 //!     Ok(())
