@@ -14,6 +14,7 @@ A Rust client library for the [whoami](https://github.com/tanbal/whoami) Identit
 
 - **Synchronous client**: Default, no additional dependencies
 - **Asynchronous client**: Enable the `tokio` feature for async support  
+- **Runner context**: Send client context for dynamic configuration routing
 - **Builder pattern**: Flexible client configuration
 - **Type-safe**: Strongly typed identity and error types
 - **Zero-copy parsing**: Efficient JSON deserialization
@@ -45,7 +46,32 @@ fn main() -> Result<(), getmyid::GetMyIdError> {
     println!("IDM URL:    {}", identity.idm_url);
     println!("Config URL: {}", identity.config_url);
     println!("Token:      {}", identity.token);
-    println!("Process:    {} (PID: {})", identity.process, identity.pid);
+    println!("Hostname:   {}", identity.runner.hostname);
+    println!("Process:    {} (PID: {})", identity.runner.process, identity.runner.pid);
+    
+    Ok(())
+}
+```
+
+### With Runner Context (Dynamic Configuration)
+
+For ephemeral applications that need dynamic configuration routing:
+
+```rust
+use getmyid::{Client, RunnerRequest};
+
+fn main() -> Result<(), getmyid::GetMyIdError> {
+    let client = Client::new();
+    
+    // Send context that will be merged with identity in runner object
+    let runner_req = RunnerRequest::new()
+        .with_instance_id(42)
+        .with_current_timestamp();
+    
+    let identity = client.get_identity_with_runner(Some(runner_req))?;
+    
+    // The runner object can be passed directly to a config server
+    println!("Runner: {:?}", identity.runner);
     
     Ok(())
 }
@@ -89,10 +115,11 @@ let client = Client::builder()
 ## How It Works
 
 1. Your application connects to the whoami daemon's Unix Domain Socket
-2. The daemon uses `SO_PEERCRED` to get your process's PID, UID, and GID from the kernel
-3. The daemon reads additional info from `/proc/[PID]/` (process name, executable path)
-4. The daemon matches your identity against configured rules
-5. If a match is found, returns the application-level identity and Kanidm OAuth2 URL
+2. Optionally sends a runner request with client context (instance_id, timestamp, etc.)
+3. The daemon uses `SO_PEERCRED` to get your process's PID, UID, and GID from the kernel
+4. The daemon reads additional info from `/proc/[PID]/` (process name, executable path)
+5. The daemon matches your identity against configured rules
+6. Returns identity with a `runner` object containing merged client + server fields
 
 ## Identity Response
 
@@ -104,22 +131,42 @@ The `Identity` struct contains:
 | `idm_url` | `String` | Identity Management (Kanidm) OAuth2/OIDC URL |
 | `config_url` | `String` | Application configuration endpoint URL |
 | `token` | `String` | Pre-shared authentication token |
-| `pid` | `u32` | Process ID |
-| `uid` | `u32` | User ID |
-| `gid` | `u32` | Group ID |
-| `process` | `String` | Process name |
+| `runner` | `Runner` | Combined client context + server identity |
+
+### Runner Object
+
+The `runner` object is designed to be passed directly to a config server:
+
+| Field | Source | Description |
+|-------|--------|-------------|
+| `identity` | server | Application-level identity name |
+| `hostname` | server | Machine hostname |
+| `process` | server | Process name |
+| `pid` | server | Process ID (kernel-verified) |
+| `uid` | server | User ID (kernel-verified) |
+| `gid` | server | Group ID (kernel-verified) |
+| `instance_id` | client | Client-provided instance identifier (optional) |
+| `timestamp` | client | Client-provided timestamp (optional) |
+| `extra` | client | Additional custom fields |
 
 ### Example Output
 
 ```
-Identity:   getmyid-sample
-IDM URL:    https://auth.example.com/oauth2/openid/billing
-Config URL: https://config.example.com/api/billing
-Token:      tok_sample_xxx
-Process:    getmyid-sample
-PID:        26567
-UID:        1000
-GID:        1000
+Identity retrieved successfully!
+
+  Identity:   TRUSTEE_AGENT
+  IDM URL:    https://auth.example.com/oauth2/trustee
+  Config URL: https://config.example.com/api/trustee
+  Token:      tok_trustee_xxx
+
+  Runner:
+    Hostname:    worker-node-03
+    Process:     trustee
+    PID:         26567
+    UID:         1000
+    GID:         1000
+    Instance ID: 42
+    Timestamp:   1738512000
 ```
 
 ## Error Handling

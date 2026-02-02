@@ -3,12 +3,12 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
 
 use crate::client::{parse_response, DEFAULT_SOCKET_PATH, DEFAULT_TIMEOUT};
 use crate::error::{GetMyIdError, Result};
-use crate::types::Identity;
+use crate::types::{Identity, RunnerRequest};
 
 /// Asynchronous client for communicating with the whoami daemon.
 ///
@@ -63,6 +63,32 @@ impl AsyncClient {
     /// - The response cannot be parsed
     /// - The operation times out
     pub async fn get_identity(&self) -> Result<Identity> {
+        self.get_identity_with_runner(None).await
+    }
+
+    /// Get the identity with client-provided runner context.
+    ///
+    /// The runner request allows you to send context (like instance_id, timestamp)
+    /// that will be merged with server-injected identity in the response's `runner` object.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use getmyid::{AsyncClient, RunnerRequest};
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), getmyid::GetMyIdError> {
+    /// let client = AsyncClient::new();
+    /// let runner_req = RunnerRequest::new()
+    ///     .with_instance_id(42)
+    ///     .with_current_timestamp();
+    ///
+    /// let identity = client.get_identity_with_runner(Some(runner_req)).await?;
+    /// println!("Instance: {:?}", identity.runner.instance_id);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn get_identity_with_runner(&self, runner: Option<RunnerRequest>) -> Result<Identity> {
         // Check socket exists
         if !self.socket_path.exists() {
             return Err(GetMyIdError::SocketNotFound(self.socket_path.clone()));
@@ -77,8 +103,20 @@ impl AsyncClient {
                 }
             })?;
 
-            // The daemon responds immediately after connection with the identity.
-            // No request needs to be sent - just read the response.
+            // Send runner request if provided
+            if let Some(ref runner_req) = runner {
+                let request = serde_json::json!({ "runner": runner_req });
+                let request_str = serde_json::to_string(&request).map_err(GetMyIdError::InvalidJson)?;
+                stream
+                    .write_all(request_str.as_bytes())
+                    .await
+                    .map_err(GetMyIdError::WriteError)?;
+                stream.flush().await.map_err(GetMyIdError::WriteError)?;
+                // Shutdown write side to signal we're done sending
+                stream.shutdown().await.ok();
+            }
+
+            // Read the response
             let mut response = String::new();
             stream
                 .read_to_string(&mut response)

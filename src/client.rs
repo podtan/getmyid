@@ -1,12 +1,12 @@
 //! Synchronous client for the whoami daemon.
 
-use std::io::Read;
+use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::error::{GetMyIdError, Result};
-use crate::types::{DaemonResponse, Identity, ResponseData};
+use crate::types::{DaemonResponse, Identity, ResponseData, RunnerRequest};
 
 /// Default socket path for the whoami daemon.
 pub const DEFAULT_SOCKET_PATH: &str = "/var/run/whoami.sock";
@@ -67,6 +67,29 @@ impl Client {
     /// - The daemon returns an error (e.g., no matching rule)
     /// - The response cannot be parsed
     pub fn get_identity(&self) -> Result<Identity> {
+        self.get_identity_with_runner(None)
+    }
+
+    /// Get the identity with client-provided runner context.
+    ///
+    /// The runner request allows you to send context (like instance_id, timestamp)
+    /// that will be merged with server-injected identity in the response's `runner` object.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use getmyid::{Client, RunnerRequest};
+    ///
+    /// let client = Client::new();
+    /// let runner_req = RunnerRequest::new()
+    ///     .with_instance_id(42)
+    ///     .with_current_timestamp();
+    ///
+    /// let identity = client.get_identity_with_runner(Some(runner_req))?;
+    /// println!("Instance: {:?}", identity.runner.instance_id);
+    /// # Ok::<(), getmyid::GetMyIdError>(())
+    /// ```
+    pub fn get_identity_with_runner(&self, runner: Option<RunnerRequest>) -> Result<Identity> {
         // Check socket exists
         if !self.socket_path.exists() {
             return Err(GetMyIdError::SocketNotFound(self.socket_path.clone()));
@@ -90,8 +113,19 @@ impl Client {
                 .map_err(GetMyIdError::WriteError)?;
         }
 
-        // The daemon responds immediately after connection with the identity.
-        // No request needs to be sent - just read the response.
+        // Send runner request if provided
+        if let Some(ref runner_req) = runner {
+            let request = serde_json::json!({ "runner": runner_req });
+            let request_str = serde_json::to_string(&request).map_err(GetMyIdError::InvalidJson)?;
+            stream
+                .write_all(request_str.as_bytes())
+                .map_err(GetMyIdError::WriteError)?;
+            stream.flush().map_err(GetMyIdError::WriteError)?;
+            // Shutdown write side to signal we're done sending
+            stream.shutdown(std::net::Shutdown::Write).ok();
+        }
+
+        // Read the response
         let mut response = String::new();
         stream
             .read_to_string(&mut response)
@@ -197,19 +231,13 @@ pub(crate) fn parse_response(response: &str) -> Result<Identity> {
             idm_url,
             config_url,
             token,
-            pid,
-            uid,
-            gid,
-            process,
+            runner,
         } => Ok(Identity {
             identity,
             idm_url,
             config_url,
             token,
-            pid,
-            uid,
-            gid,
-            process,
+            runner,
         }),
         ResponseData::Error { .. } => Err(GetMyIdError::MissingField { field: "identity" }),
     }
@@ -221,7 +249,7 @@ mod tests {
 
     #[test]
     fn test_parse_success_response() {
-        let response = r#"{"status":"ok","identity":"BILLING_PROD","idm_url":"https://auth.example.com/oauth2/billing","config_url":"https://config.example.com/api/billing","token":"tok_billing_xxx","pid":1234,"uid":1001,"gid":1001,"process":"billing-app"}"#;
+        let response = r#"{"status":"ok","identity":"BILLING_PROD","idm_url":"https://auth.example.com/oauth2/billing","config_url":"https://config.example.com/api/billing","token":"tok_billing_xxx","runner":{"identity":"BILLING_PROD","hostname":"worker-01","process":"billing-app","pid":1234,"uid":1001,"gid":1001}}"#;
         
         let identity = parse_response(response).unwrap();
         
@@ -229,10 +257,25 @@ mod tests {
         assert_eq!(identity.idm_url, "https://auth.example.com/oauth2/billing");
         assert_eq!(identity.config_url, "https://config.example.com/api/billing");
         assert_eq!(identity.token, "tok_billing_xxx");
-        assert_eq!(identity.pid, 1234);
-        assert_eq!(identity.uid, 1001);
-        assert_eq!(identity.gid, 1001);
-        assert_eq!(identity.process, "billing-app");
+        assert_eq!(identity.runner.identity, "BILLING_PROD");
+        assert_eq!(identity.runner.hostname, "worker-01");
+        assert_eq!(identity.runner.process, "billing-app");
+        assert_eq!(identity.runner.pid, 1234);
+        assert_eq!(identity.runner.uid, 1001);
+        assert_eq!(identity.runner.gid, 1001);
+    }
+
+    #[test]
+    fn test_parse_success_response_with_instance_id() {
+        let response = r#"{"status":"ok","identity":"TRUSTEE_AGENT","idm_url":"https://auth.example.com/oauth2/trustee","config_url":"https://config.example.com/api/trustee","token":"tok_trustee_xxx","runner":{"instance_id":42,"timestamp":1738512000,"identity":"TRUSTEE_AGENT","hostname":"worker-03","process":"trustee","pid":26567,"uid":1000,"gid":1000}}"#;
+        
+        let identity = parse_response(response).unwrap();
+        
+        assert_eq!(identity.identity, "TRUSTEE_AGENT");
+        assert_eq!(identity.runner.instance_id, Some(42));
+        assert_eq!(identity.runner.timestamp, Some(1738512000));
+        assert_eq!(identity.runner.hostname, "worker-03");
+        assert_eq!(identity.runner.pid, 26567);
     }
 
     #[test]
@@ -285,5 +328,17 @@ mod tests {
         
         assert_eq!(client.socket_path(), Path::new(DEFAULT_SOCKET_PATH));
         assert_eq!(client.timeout(), Some(DEFAULT_TIMEOUT));
+    }
+
+    #[test]
+    fn test_runner_request_builder() {
+        let req = RunnerRequest::new()
+            .with_instance_id(42)
+            .with_timestamp(1738512000)
+            .with_field("custom", "value");
+        
+        assert_eq!(req.instance_id, Some(42));
+        assert_eq!(req.timestamp, Some(1738512000));
+        assert_eq!(req.extra.get("custom").unwrap(), "value");
     }
 }

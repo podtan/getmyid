@@ -10,6 +10,7 @@
 //!
 //! - **Synchronous client**: Default, no additional dependencies
 //! - **Asynchronous client**: Enable the `tokio` feature for async support
+//! - **Runner context**: Send client context that gets merged with server identity
 //! - **Builder pattern**: Flexible client configuration
 //! - **Type-safe**: Strongly typed identity and error types
 //!
@@ -28,7 +29,30 @@
 //!     println!("IDM URL: {}", identity.idm_url);
 //!     println!("Config URL: {}", identity.config_url);
 //!     println!("Token: {}", identity.token);
-//!     println!("Process: {} (PID: {})", identity.process, identity.pid);
+//!     println!("Hostname: {}", identity.runner.hostname);
+//!     println!("Process: {} (PID: {})", identity.runner.process, identity.runner.pid);
+//!     
+//!     Ok(())
+//! }
+//! ```
+//!
+//! ### With Runner Context (for dynamic configuration)
+//!
+//! ```no_run
+//! use getmyid::{Client, RunnerRequest};
+//!
+//! fn main() -> Result<(), getmyid::GetMyIdError> {
+//!     let client = Client::new();
+//!     
+//!     // Send context that will be merged with identity in runner object
+//!     let runner_req = RunnerRequest::new()
+//!         .with_instance_id(42)
+//!         .with_current_timestamp();
+//!     
+//!     let identity = client.get_identity_with_runner(Some(runner_req))?;
+//!     
+//!     // The runner object can be passed directly to a config server
+//!     println!("Runner: {:?}", identity.runner);
 //!     
 //!     Ok(())
 //! }
@@ -65,10 +89,14 @@
 //! ## How It Works
 //!
 //! 1. Your application connects to the whoami daemon's Unix Domain Socket
-//! 2. The daemon uses `SO_PEERCRED` to get your process's PID, UID, and GID from the kernel
-//! 3. The daemon reads additional info from `/proc/[PID]/` (process name, executable path)
-//! 4. The daemon matches your identity against configured rules
-//! 5. If a match is found, returns the application-level identity and URLs
+//! 2. Optionally sends a runner request with client context (instance_id, timestamp, etc.)
+//! 3. The daemon uses `SO_PEERCRED` to get your process's PID, UID, and GID from the kernel
+//! 4. The daemon reads additional info from `/proc/[PID]/` (process name, executable path)
+//! 5. The daemon matches your identity against configured rules
+//! 6. Returns identity with a `runner` object containing merged client + server fields
+//!
+//! The `runner` object is designed to be passed directly to a config server, which can
+//! use both the verified identity and client-provided context to route configuration.
 //!
 //! This provides zero-trust authentication where applications don't need passwords -
 //! the Linux kernel vouches for their identity.
@@ -86,7 +114,7 @@ mod async_client;
 // Re-export main types
 pub use client::{Client, ClientBuilder, DEFAULT_SOCKET_PATH, DEFAULT_TIMEOUT};
 pub use error::{GetMyIdError, Result};
-pub use types::Identity;
+pub use types::{Identity, Runner, RunnerRequest};
 
 #[cfg(feature = "tokio")]
 pub use async_client::{AsyncClient, AsyncClientBuilder};
