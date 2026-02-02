@@ -1,6 +1,6 @@
 [package]
 name = "getmyid"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 authors = ["Leo <leo@podtan.com>"]
 description = "Rust client library for whoami Identity-by-PID daemon"
