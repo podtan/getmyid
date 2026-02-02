@@ -41,9 +41,11 @@ fn main() -> Result<(), getmyid::GetMyIdError> {
     let client = Client::new();
     let identity = client.get_identity()?;
     
-    println!("Identity: {}", identity.identity);
-    println!("Kanidm URL: {}", identity.kanidm_url);
-    println!("Process: {} (PID: {})", identity.process, identity.pid);
+    println!("Identity:   {}", identity.identity);
+    println!("IDM URL:    {}", identity.idm_url);
+    println!("Config URL: {}", identity.config_url);
+    println!("Token:      {}", identity.token);
+    println!("Process:    {} (PID: {})", identity.process, identity.pid);
     
     Ok(())
 }
@@ -99,11 +101,26 @@ The `Identity` struct contains:
 | Field | Type | Description |
 |-------|------|-------------|
 | `identity` | `String` | Application-level identity name |
-| `kanidm_url` | `String` | Kanidm OAuth2 URL for this identity |
+| `idm_url` | `String` | Identity Management (Kanidm) OAuth2/OIDC URL |
+| `config_url` | `String` | Application configuration endpoint URL |
+| `token` | `String` | Pre-shared authentication token |
 | `pid` | `u32` | Process ID |
 | `uid` | `u32` | User ID |
 | `gid` | `u32` | Group ID |
 | `process` | `String` | Process name |
+
+### Example Output
+
+```
+Identity:   getmyid-sample
+IDM URL:    https://auth.example.com/oauth2/openid/billing
+Config URL: https://config.example.com/api/billing
+Token:      tok_sample_xxx
+Process:    getmyid-sample
+PID:        26567
+UID:        1000
+GID:        1000
+```
 
 ## Error Handling
 
