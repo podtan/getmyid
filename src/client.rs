@@ -194,14 +194,16 @@ pub(crate) fn parse_response(response: &str) -> Result<Identity> {
     match daemon_response.data {
         ResponseData::Success {
             identity,
-            kanidm_url,
+            idm_url,
+            config_url,
             pid,
             uid,
             gid,
             process,
         } => Ok(Identity {
             identity,
-            kanidm_url,
+            idm_url,
+            config_url,
             pid,
             uid,
             gid,
@@ -217,12 +219,13 @@ mod tests {
 
     #[test]
     fn test_parse_success_response() {
-        let response = r#"{"status":"ok","identity":"BILLING_PROD","kanidm_url":"https://auth.example.com/oauth2/billing","pid":1234,"uid":1001,"gid":1001,"process":"billing-app"}"#;
+        let response = r#"{"status":"ok","identity":"BILLING_PROD","idm_url":"https://auth.example.com/oauth2/billing","config_url":"https://config.example.com/api/billing","pid":1234,"uid":1001,"gid":1001,"process":"billing-app"}"#;
         
         let identity = parse_response(response).unwrap();
         
         assert_eq!(identity.identity, "BILLING_PROD");
-        assert_eq!(identity.kanidm_url, "https://auth.example.com/oauth2/billing");
+        assert_eq!(identity.idm_url, "https://auth.example.com/oauth2/billing");
+        assert_eq!(identity.config_url, "https://config.example.com/api/billing");
         assert_eq!(identity.pid, 1234);
         assert_eq!(identity.uid, 1001);
         assert_eq!(identity.gid, 1001);

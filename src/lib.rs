@@ -25,7 +25,8 @@
 //!     let identity = client.get_identity()?;
 //!     
 //!     println!("Identity: {}", identity.identity);
-//!     println!("Kanidm URL: {}", identity.kanidm_url);
+//!     println!("IDM URL: {}", identity.idm_url);
+//!     println!("Config URL: {}", identity.config_url);
 //!     println!("Process: {} (PID: {})", identity.process, identity.pid);
 //!     
 //!     Ok(())
@@ -66,7 +67,7 @@
 //! 2. The daemon uses `SO_PEERCRED` to get your process's PID, UID, and GID from the kernel
 //! 3. The daemon reads additional info from `/proc/[PID]/` (process name, executable path)
 //! 4. The daemon matches your identity against configured rules
-//! 5. If a match is found, returns the application-level identity and Kanidm OAuth2 URL
+//! 5. If a match is found, returns the application-level identity and URLs
 //!
 //! This provides zero-trust authentication where applications don't need passwords -
 //! the Linux kernel vouches for their identity.

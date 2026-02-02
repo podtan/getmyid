@@ -4,15 +4,18 @@ use serde::{Deserialize, Serialize};
 
 /// Identity information returned by the whoami daemon.
 ///
-/// This struct contains both the application-level identity (name and Kanidm URL)
+/// This struct contains both the application-level identity (name and URLs)
 /// and the process-level identity (PID, UID, GID, process name).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Identity {
     /// Application-level identity name (from rules.conf).
     pub identity: String,
 
-    /// Kanidm OAuth2 URL for this identity.
-    pub kanidm_url: String,
+    /// Identity Management (OAuth2/OIDC) URL for this identity.
+    pub idm_url: String,
+
+    /// Configuration/API server URL for this identity.
+    pub config_url: String,
 
     /// Process ID of the calling process.
     pub pid: u32,
@@ -41,7 +44,8 @@ pub(crate) struct DaemonResponse {
 pub(crate) enum ResponseData {
     Success {
         identity: String,
-        kanidm_url: String,
+        idm_url: String,
+        config_url: String,
         pid: u32,
         uid: u32,
         gid: u32,
